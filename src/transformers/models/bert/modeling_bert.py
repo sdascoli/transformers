@@ -274,6 +274,7 @@ class BertSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+            expression = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -347,7 +348,9 @@ class BertSelfAttention(nn.Module):
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores * attention_mask
+            attention_scores = attention_scores + attention_mask
+        if expression is not None:
+            attention_scores = attention_scores * expression
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -415,6 +418,7 @@ class BertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        expression = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -424,6 +428,7 @@ class BertAttention(nn.Module):
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
+            expression,
             attention_mask,
             head_mask,
             encoder_hidden_states,
@@ -483,6 +488,7 @@ class BertLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        expression = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -494,6 +500,7 @@ class BertLayer(nn.Module):
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
+            expression,
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
@@ -561,6 +568,7 @@ class BertEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        expression = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -601,6 +609,7 @@ class BertEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
+                    expression,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
@@ -609,6 +618,7 @@ class BertEncoder(nn.Module):
             else:
                 layer_outputs = layer_module(
                     hidden_states,
+                    expression,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
@@ -918,6 +928,7 @@ class BertModel(BertPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
+            expression = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -990,7 +1001,7 @@ class BertModel(BertPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = attention_mask #self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1019,6 +1030,7 @@ class BertModel(BertPreTrainedModel):
         )
         encoder_outputs = self.encoder(
             embedding_output,
+            expression=expression,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
