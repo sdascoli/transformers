@@ -215,8 +215,8 @@ class BertEmbeddings(nn.Module):
 
         seq_length = input_shape[1]
 
-        if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+        #if position_ids is None:
+        #    position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -908,6 +908,12 @@ class BertModel(BertPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+        if config.expression_as_input:
+            self.expression_ffn = nn.Sequential(nn.Linear(1, config.hidden_size),
+                                                nn.ReLU(),
+                                                nn.Linear(config.hidden_size, config.hidden_size))
+        else:
+            self.expression_ffn = None
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1032,6 +1038,13 @@ class BertModel(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+
+        if self.expression_ffn is not None and expression is not None:
+            expression = expression.unsqueeze(-1)
+            expression_embedding = self.expression_ffn(expression)
+            embedding_output += expression_embedding
+            expression = None
+
         embedding_output = self.project(embedding_output)
         encoder_outputs = self.encoder(
             embedding_output,
