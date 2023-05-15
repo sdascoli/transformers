@@ -1039,13 +1039,13 @@ class BertModel(BertPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
+        embedding_output = self.project(embedding_output)
         if self.expression_ffn is not None and expression is not None:
             expression = expression.unsqueeze(-1)
             expression_embedding = self.expression_ffn(expression)
             embedding_output += expression_embedding
             expression = None
-
-        embedding_output = self.project(embedding_output)
+            
         encoder_outputs = self.encoder(
             embedding_output,
             expression=expression,
